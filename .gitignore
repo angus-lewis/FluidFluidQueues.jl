@@ -1,0 +1,11 @@
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+
+CMEParams.json
+CMEParams*.json
+*.zip
+
+*~
+
+*.png
