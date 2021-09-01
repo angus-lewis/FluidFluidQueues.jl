@@ -19,6 +19,10 @@ const IndexDict = Dict{Tuple{String,Union{Int64,Colon}},BitArray{1}}
 """ The dictionary which returns various partitions of the generator i.e. ("+","-"),(i,j) """
 const PartitionedGenerator = Dict{GeneratorIndex,SparseArrays.SparseMatrixCSC{Float64,Int64}}
 
+getindex(B::FullGenerator,plus_minus_index::PlusMinusIndex,phase_index::PhaseIndex) = 
+    B.BDict[plus_minus_index, phase_index]
+getindex(B::FullGenerator,idx::Tuple{PlusMinusIndex,PhaseIndex}) = 
+    getindex(B,idx[1],idx[2])
 """
 
     MakeFil(
