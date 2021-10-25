@@ -1,44 +1,44 @@
 
-function MakeRDict(
-    R::Union{Array{<:Real,2},SparseArrays.SparseMatrixCSC{<:Real,Int64}},
-    model::Model, 
-    mesh::Mesh,
-    )
+# function MakeRDict(
+#     R::Union{Array{<:Real,2},SparseArrays.SparseMatrixCSC{<:Real,Int64}},
+#     model::Model, 
+#     mesh::Mesh,
+#     )
 
-    ## Make a Dictionary so that the blocks of B are easy to access
-    N₋ = sum(model.C.<=0)
-    N₊ = sum(model.C.>=0)
+#     ## Make a Dictionary so that the blocks of B are easy to access
+#     N₋ = sum(model.C.<=0)
+#     N₊ = sum(model.C.>=0)
 
-    RDict = Dict{Tuple{String,Union{Int,Colon}},SparseArrays.SparseMatrixCSC{Float64,Int64}}()
+#     RDict = Dict{Tuple{String,Union{Int,Colon}},SparseArrays.SparseMatrixCSC{Float64,Int64}}()
 
-    ppositions = cumsum(model.C .<= 0)
-    qpositions = cumsum(model.C .>= 0)
-    for ℓ in ["+", "-"]
-        for i = 1:NPhases(model)
-            FilBases = repeat(mesh.Fil[(ℓ,i)]', NBases(mesh), 1)[:]
-            pitemp = falses(N₋)
-            qitemp = falses(N₊)
-            if model.C[i] <= 0
-                pitemp[ppositions[i]] = mesh.Fil["p"*ℓ,i][1]
-            end
-            if model.C[i] >= 0
-                qitemp[qpositions[i]] = mesh.Fil["q"*ℓ,i][1]
-            end
-            i_idx = [
-                pitemp
-                falses((i - 1) * TotalNBases(mesh))
-                FilBases
-                falses(NPhases(model) * TotalNBases(mesh) - i * TotalNBases(mesh))
-                qitemp
-            ]
-            RDict[(ℓ,i)] = R[i_idx, i_idx]
-        end
-        FlBases =
-            [mesh.Fil["p"*ℓ,:]; repeat(mesh.Fil[ℓ,:]', NBases(mesh), 1)[:]; mesh.Fil["q"*ℓ,:]]
-        RDict[ℓ,:] = R[FlBases, FlBases]
-    end
-    return RDict
-end
+#     ppositions = cumsum(model.C .<= 0)
+#     qpositions = cumsum(model.C .>= 0)
+#     for ℓ in ["+", "-"]
+#         for i = 1:NPhases(model)
+#             FilBases = repeat(mesh.Fil[(ℓ,i)]', NBases(mesh), 1)[:]
+#             pitemp = falses(N₋)
+#             qitemp = falses(N₊)
+#             if model.C[i] <= 0
+#                 pitemp[ppositions[i]] = mesh.Fil["p"*ℓ,i][1]
+#             end
+#             if model.C[i] >= 0
+#                 qitemp[qpositions[i]] = mesh.Fil["q"*ℓ,i][1]
+#             end
+#             i_idx = [
+#                 pitemp
+#                 falses((i - 1) * TotalNBases(mesh))
+#                 FilBases
+#                 falses(NPhases(model) * TotalNBases(mesh) - i * TotalNBases(mesh))
+#                 qitemp
+#             ]
+#             RDict[(ℓ,i)] = R[i_idx, i_idx]
+#         end
+#         FlBases =
+#             [mesh.Fil["p"*ℓ,:]; repeat(mesh.Fil[ℓ,:]', NBases(mesh), 1)[:]; mesh.Fil["q"*ℓ,:]]
+#         RDict[ℓ,:] = R[FlBases, FlBases]
+#     end
+#     return RDict
+# end
 
 """
 # Construct the DG approximation to the operator `R`.

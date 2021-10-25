@@ -1,15 +1,16 @@
-name = ""
+name = "FluidFluidQueues"
 uuid = "d6d9befd-9522-4a5a-b455-5c4e55a38956"
 authors = ["angus-lewis <angus.lewis@student.adelaide.edu.au>"]
 version = "0.1.0"
 
 [deps]
+DiscretisedFluidQueues = "8d825d2a-a153-45be-9001-3598b904770d"
+
+[compat]
+julia = "^1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
-
-[compat]
-julia = "^1"
