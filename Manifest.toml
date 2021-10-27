@@ -41,7 +41,9 @@ uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 
 [[DiscretisedFluidQueues]]
 deps = ["FileIO", "JLD2", "Jacobi", "LinearAlgebra", "Random", "SparseArrays", "StableRNGs", "StaticArrays"]
-path = "/Users/anguslewis/.julia/dev/DiscretisedFluidQueues"
+git-tree-sha1 = "b431728dd1927d7e426d05be622383221c95cb05"
+repo-rev = "main"
+repo-url = "https://github.com/angus-lewis/DiscretisedFluidQueues.jl"
 uuid = "8d825d2a-a153-45be-9001-3598b904770d"
 version = "0.3.0"
 
