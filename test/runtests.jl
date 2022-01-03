@@ -15,7 +15,7 @@ using Test
 T = [-2.5 2 0.5; 1 -2 1; 1 2 -3]
 C = [0.0; 2.0; -6.0]
 
-model = BoundedFluidQueue(T,C)
+model = BoundedFluidQueue(T,C,6.0)
 am = augment_model(model)
 nodes = 0.0:1.0:6.0
 order = 5

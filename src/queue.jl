@@ -1,8 +1,28 @@
-struct Rates
+struct Rates 
     interior::Matrix{Float64}
     lwr::Vector{Float64}
     upr::Vector{Float64}
 end
+
+"""
+Indexing for Rates by cell, k, then phase, i.
+"""
+function Base.getindex(s::Rates, k::Int, i::Int)
+    if k==0
+        r = s.lwr[i]
+    elseif k==size(s.interior,2)+1
+        r = s.upr[i]
+    else
+        r = s.interior[i,k]
+    end
+    return r
+end
+Base.getindex(s::Rates, i::AbstractVector{Int}, k::AbstractVector{Int}) = 
+    [s[ii,kk] for ii in i, kk in k]
+Base.getindex(s::Rates, i::AbstractVector{Int}, k::Int) = 
+    [s[ii,k] for ii in i]
+Base.getindex(s::Rates, i::Int, k::AbstractVector{Int}) = 
+    [s[i,kk] for kk in k]
 
 struct FluidFluidQueue{T<:DiscretisedFluidQueue}# where N<:AbstractVector{Float64}}
     dq::T
@@ -29,6 +49,33 @@ FluidFluidQueue(dq::DiscretisedFluidQueue,rates::Rates)=FluidFluidQueue{typeof(d
 function FluidFluidQueue(dq::DiscretisedFluidQueue,interior::Matrix{Float64},lwr::Vector{Float64},upr::Vector{Float64})
     return FluidFluidQueue(dq,Rates(interior,lwr,upr))
 end
+
+function getrates(ffq::FluidFluidQueue,i::Int,k::Int)
+    if k==0
+        if rates(ffq.dq,i)<=0.0
+            idx = sum(DiscretisedFluidQueues._has_left_boundary(ffq.dq.model.S[1:i]))
+            r = ffq.rates.lwr[idx]
+        else
+            r = 0.0
+        end
+    elseif k==size(ffq.rates.interior,2)+1
+        if rates(ffq.dq,i)<=0.0
+            idx = sum(DiscretisedFluidQueues._has_right_boundary(ffq.dq.model.S[1:i]))
+            r = ffq.rates.upr[idx]
+        else
+            r = 0.0
+        end
+    else
+        r = ffq.rates.interior[i,k]
+    end
+    return r
+end
+getrates(ffq::FluidFluidQueue,i::AbstractVector{Int},k::AbstractVector{Int}) = 
+    [getrates(ffq::FluidFluidQueue,ii,kk) for ii in i, kk in  k]
+getrates(ffq::FluidFluidQueue,i::Int,k::AbstractVector{Int}) = 
+    [getrates(ffq::FluidFluidQueue,i,kk) for kk in  k]
+getrates(ffq::FluidFluidQueue,i::AbstractVector{Int},k::Int) = 
+    [getrates(ffq::FluidFluidQueue,ii,k) for ii in i]
 
 function DiscretisedFluidQueues.augment_model(ffq::FluidFluidQueue)
     aug_model = augment_model(ffq.dq.model)

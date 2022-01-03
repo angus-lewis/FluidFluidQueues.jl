@@ -40,16 +40,33 @@ given the `InitialCondition` on (φ(0),X(0),Y(0)).
     - `n::Array{Float64,1}` a vector of length `M` containing the number of
         transitions of `φ` at the `StoppingTime`
 """
-function SimSFFM(
-    model::Model,
+function DiscretisedFluidQueues.simulate(
+    ffq::FluidFluidQueue{<:DiscretisedFluidQueue},
     StoppingTime::Function,
     InitCondition::NamedTuple{(:φ, :X, :Y)},
+    rng::Random.AbstractRNG=Random.default_rng(),
 )
+    model = ffq.dq.model
+    # find transition probabilities of phase process
     d = LinearAlgebra.diag(model.T)
     P = (model.T - LinearAlgebra.diagm(0 => d)) ./ -d
+    # convenient to sample transitions with
     CumP = cumsum(P, dims = 2)
+
+    # transition probabilities upon hitting a boundary
+    # lower
+    idx₋ = findall(rates(model).<0.0)
+    CumP_lwr = zeros(size(P))
+    CumP_lwr[idx₋,:] = cumsum(model.P_lwr, dims = 2)
+    # upper 
+    idx₊ = findall(rates(model).>0.0)
+    CumP_upr = zeros(size(P))
+    CumP_upr[idx₊,:] = cumsum(model.P_upr, dims = 2)
+
+    # rates for exponential holding times in each phase 
     Λ = LinearAlgebra.diag(model.T)
 
+    # containers to store the sims 
     M = length(InitCondition.φ)
     tSims = Array{Float64,1}(undef, M)
     φSims = Array{Float64,1}(undef, M)
@@ -57,38 +74,81 @@ function SimSFFM(
     YSims = Array{Float64,1}(undef, M)
     nSims = Array{Float64,1}(undef, M)
 
+    # simulate M realisations 
     for m = 1:M
-        SFFM0 = (
-            t = 0.0,
-            φ = InitCondition.φ[m],
-            X = InitCondition.X[m],
-            Y = InitCondition.Y[m],
-            n = 0.0,
-        )
-        if !(model.Bounds[1, 1] <= SFFM0.X <= model.Bounds[1, 2]) ||
-           !(model.Bounds[2, 1] <= SFFM0.Y <= model.Bounds[2, 2]) ||
-           !in(SFFM0.φ, 1:n_phases(model))
-            (tSims[m], φSims[m], XSims[m], YSims[m], nSims[m]) =
-                (t = NaN, φ = NaN, X = NaN, Y = NaN, n = NaN)
+        SFM0 = (t=0.0, φ=InitCondition.φ[m], X=InitCondition.X[m], n=0.0)
+        Y0 = InitCondition.Y[m]
+        # check if initial condition is invalid and return NaNs if it is 
+        if !(0.0 <= SFM0.X <= model.b) || !(0.0 <= Y0) || !in(SFM0.φ, 1:n_phases(model))
+            (tSims[m], φSims[m], XSims[m], nSims[m]) =
+                (t = NaN, φ = NaN, X = NaN, n = NaN)
+            YSims[m] = NaN
         else
-            while 1 == 1
-                S = log(rand()) / Λ[SFFM0.φ]
-                t = SFFM0.t + S
-                X = UpdateXt(model, SFFM0, S)
-                Y = UpdateYt(model, SFFM0, S)
-                φ = findfirst(rand() .< CumP[SFFM0.φ, :])
-                n = SFFM0.n + 1.0
-                SFFM = (t = t, φ = φ, X = X, Y = Y, n = n)
-                τ = StoppingTime(model, SFFM, SFFM0)
+            cell_idx0 = initialise_cell_idx(ffq,SFM0)
+            while true
+                # generate random exponential holding time via inverse CDF method
+                S = log(rand(rng)) / Λ[SFM0.φ]
+                X, φ, t = DiscretisedFluidQueues.Update(model, SFM0, S, CumP, CumP_lwr, CumP_upr, rng)
+                cell_idx = find_cell_idx(ffq,SFM0.φ,cell_idx0,X) # find the cell in which X resides
+                SFM = (t=t, φ=φ, X=X, n=SFM0.n+1)
+                Y = UpdateYt(ffq, SFM, SFM0, Y0, cell_idx, cell_idx0)
+                τ = StoppingTime(ffq, SFM, SFM0, Y, Y0)
                 if τ.Ind
-                    (tSims[m], φSims[m], XSims[m], YSims[m], nSims[m]) = τ.SFFM
+                    (tSims[m], φSims[m], XSims[m], nSims[m]) = τ.SFM
+                    YSims[m] = τ.Y
                     break
                 end
-                SFFM0 = SFFM
+                cell_idx0 = cell_idx
+                SFM0 = SFM
+                Y0 = Y
             end
         end
     end
-    return (t = tSims, φ = φSims, X = XSims, Y = YSims, n = nSims)
+    return (t = tSims, φ = φSims, X = XSims, n = nSims), YSims
+end
+
+function initialise_cell_idx(ffq,SFM0)
+    cell_idx0 = findfirst(ffq.dq.mesh.nodes .> SFM0.X)
+    if (cell_idx0===nothing)
+        if (rates(ffq.dq,SFM0.φ)<0.0) 
+            cell_idx0 = length(ffq.dq.mesh.nodes)-1
+        else
+            cell_idx0 = length(ffq.dq.mesh.nodes)
+        end
+    elseif (cell_idx0==1)&&(rates(ffq.dq,SFM0.φ)<=0.0)&&(SFM0.X==0.0)
+        cell_idx0 = 0
+    else 
+        cell_idx0 -= 1
+    end
+    return cell_idx0
+end
+
+function find_cell_idx(ffq,φ0,cell_idx0,X)
+    # cell_idx = -1
+    if (X==0.0)
+        cell_idx = 0
+    elseif X==ffq.dq.model.b
+        cell_idx = length(ffq.dq.mesh.nodes)
+    elseif (rates(ffq.dq,φ0)>0.0)
+        cell_idx = -1
+        for n in max(1,cell_idx0):length(ffq.dq.mesh.nodes)
+            if ffq.dq.mesh.nodes[n]<X
+                cell_idx = n
+                break
+            end
+        end
+    elseif (rates(ffq.dq,φ0)<0.0)
+        cell_idx = -1
+        for n in min(length(ffq.dq.mesh.nodes),cell_idx0):-1:1
+            if ffq.dq.mesh.nodes[n]<X
+                cell_idx = n
+                break
+            end
+        end
+    else
+        cell_idx = cell_idx0
+    end
+    return cell_idx
 end
 
 """
@@ -96,7 +156,7 @@ Returns ``Y(t+S)`` given ``Y(t)``.
 
     UpdateYt(
         model::Model,
-        SFFM0::NamedTuple{(:t, :φ, :X, :Y, :n)},
+        SFM0::NamedTuple{(:t, :φ, :X, :n)},
         S::Real,
     )
 
@@ -108,30 +168,65 @@ Returns ``Y(t+S)`` given ``Y(t)``.
 - `S::Real`: an elapsed amount of time to evaluate ``X`` at, i.e. ``X(t+S)``.
 """
 function UpdateYt(
-    model::Model,
-    SFFM0::NamedTuple{(:t, :φ, :X, :Y, :n)},
-    S::Real,
+    ffq::FluidFluidQueue,
+    SFM::NamedTuple{(:t, :φ, :X, :n)},
+    SFM0::NamedTuple{(:t, :φ, :X, :n)},
+    Y0::Float64,
+    cell_idx::Int, cell_idx0::Int,
 )
-    # given the last position of a SFFM, SFFM0, a time step of size s, find the
+    # given the last position of a SFM, SFM0, a time step of size s, find the
     # position of Y at time t
-    if rates(model,SFFM0.φ) == 0
-        Y = SFFM0.Y + S * model.r.r(SFFM0.X)[SFFM0.φ]
+    speedX = rates(ffq.dq,SFM0.φ)
+    if (speedX==0.0)||((speedX<=0.0)&&(SFM0.X==0.0))||((speedX>=0.0)&&(SFM0.X==ffq.dq.model.b))
+        Y = Y0 + (SFM.t-SFM0.t) * getrates(ffq,SFM0.φ,cell_idx0)
     else
-        X = UpdateXt(model, SFFM0, S)
-        ind = (X.==model.Bounds[1, :])[:]
-        if any(ind)
-            # time at which Xt hits u or v
-            t0 = (model.Bounds[1, ind][1] - SFFM0.X) / rates(model,SFFM0.φ)
-            Y =
-                SFFM0.Y +
-                (model.r.R(X)[SFFM0.φ] - model.r.R(SFFM0.X)[SFFM0.φ]) /
-                rates(model,SFFM0.φ) +
-                model.r.r(model.Bounds[1, ind][1])[SFFM0.φ] * (S - t0)
+        # determine if X has hit a boundary 
+        if (SFM.X==0.0)||(SFM.X==ffq.dq.model.b) 
+            if speedX>0.0 # must be upper boundary in this case
+                cells_traversed_fully = cell_idx0+1:cell_idx-1
+                time_spent_in_cells_traversed = [
+                    (ffq.dq.mesh.nodes[cell_idx0+1]-SFM0.X)./speedX; # time to leave cell_idx0
+                    [Δ(ffq.dq.mesh,k) for k in cells_traversed_fully]./speedX;
+                    #(SFM.X-ffq.dq.mesh.nodes[cell_idx])./speedX; # time since last change of cell
+                ]
+                Y = Y0 + dot(getrates(ffq,SFM0.φ,cell_idx0:cell_idx-1),time_spent_in_cells_traversed)
+            elseif speedX<0.0 # must be lower boundary in this case
+                cells_traversed_fully = cell_idx+1:cell_idx0-1
+                time_spent_in_cells_traversed = [
+                    #(ffq.dq.mesh.nodes[cell_idx+1]-SFM.X)./speedX; # time since last change of cell
+                    [Δ(ffq.dq.mesh,k) for k in cells_traversed_fully]./speedX;
+                    (SFM0.X-ffq.dq.mesh.nodes[cell_idx0])./speedX; # time to leave first cell
+                ]
+                Y = Y0 - dot(getrates(ffq,SFM0.φ,cell_idx+1:cell_idx0),time_spent_in_cells_traversed)
+            end
         else
-            Y =
-                SFFM0.Y +
-                (model.r.R(X)[SFFM0.φ] - model.r.R(SFFM0.X)[SFFM0.φ]) /
-                rates(model,SFFM0.φ)
+            if speedX>0.0
+                if cell_idx0==cell_idx
+                    time_spent_in_cells_traversed = (SFM.X-SFM0.X)./speedX
+                    Y = Y0 + dot(getrates(ffq,SFM0.φ,cell_idx0),time_spent_in_cells_traversed)
+                else
+                    cells_traversed_fully = cell_idx0+1:cell_idx-1
+                    time_spent_in_cells_traversed = [
+                        (ffq.dq.mesh.nodes[cell_idx0+1]-SFM0.X)./speedX; # time to leave cell_idx0
+                        [Δ(ffq.dq.mesh,k) for k in cells_traversed_fully]./speedX;
+                        (SFM.X-ffq.dq.mesh.nodes[cell_idx])./speedX; # time since last change of cell
+                    ]
+                    Y = Y0 + dot(getrates(ffq,SFM0.φ,cell_idx0:cell_idx),time_spent_in_cells_traversed)
+                end
+            elseif speedX<0.0
+                if cell_idx0==cell_idx
+                    time_spent_in_cells_traversed = (SFM0.X-SFM.X)./speedX
+                    Y = Y0 - dot(getrates(ffq,SFM0.φ,cell_idx0),time_spent_in_cells_traversed)
+                else
+                    cells_traversed_fully = cell_idx+1:cell_idx0-1
+                    time_spent_in_cells_traversed = [
+                        (ffq.dq.mesh.nodes[cell_idx+1]-SFM.X)./speedX; # time since last change of cell
+                        [Δ(ffq.dq.mesh,k) for k in cells_traversed_fully]./speedX;
+                        (SFM0.X-ffq.dq.mesh.nodes[cell_idx0])./speedX; # time to leave first cell
+                    ]
+                    Y = Y0 - dot(getrates(ffq,SFM0.φ,cell_idx:cell_idx0),time_spent_in_cells_traversed)
+                end
+            end
         end
     end
     return Y
@@ -139,135 +234,10 @@ end
 
 
 """
-Constructs the `StoppingTime` ``1(t>T)``
-
-    FixedTime( T::Real)
-
-# Arguments
-- `T`: a time at which to stop the process
-
-# Output
-- `FixedTimeFun`: a function with two methods
-    - `FixedTimeFun(
-        model::Model,
-        SFM::NamedTuple{(:t, :φ, :X, :n)},
-        SFM0::NamedTuple{(:t, :φ, :X, :n)},
-    )`: a stopping time for a SFM.
-    - `FixedTimeFun(
-        model::Model,
-        SFFM::NamedTuple{(:t, :φ, :X, :Y, :n)},
-        SFFM0::NamedTuple{(:t, :φ, :X, :Y, :n)},
-    )`: a stopping time for a SFFM
-"""
-function FixedTime( T::Float64)
-    # Defines a simple stopping time, 1(t>T).
-    # SFFM METHOD
-    function FixedTimeFun(
-        model::Model,
-        SFFM::NamedTuple{(:t, :φ, :X, :Y, :n)},
-        SFFM0::NamedTuple{(:t, :φ, :X, :Y, :n)},
-    )
-        Ind = SFFM.t > T
-        if Ind
-            s = T - SFFM0.t
-            X = UpdateXt(model, SFFM0, s)
-            Y = UpdateYt(model, SFFM0, s)
-            SFFM = (T, SFFM0.φ, X, Y, SFFM0.n)
-        end
-        return (Ind = Ind, SFFM = SFFM)
-    end
-    return FixedTimeFun
-end
-
-
-"""
-Constructs the `StoppingTime` ``1(N(t)>n)`` where ``N(t)`` is the number of
-jumps of ``φ`` by time ``t``.
-
-    NJumps( N::Int)
-
-# Arguments
-- `N`: a desired number of jumps
-
-# Output
-- `NJumpsFun`: a function with two methods
-    - `NJumpsFun(
-        model::Model,
-        SFM::NamedTuple{(:t, :φ, :X, :n)},
-        SFM0::NamedTuple{(:t, :φ, :X, :n)},
-    )`: a stopping time for a SFM.
-    - `NJumpsFun(
-        model::Model,
-        SFFM::NamedTuple{(:t, :φ, :X, :Y, :n)},
-        SFFM0::NamedTuple{(:t, :φ, :X, :Y, :n)},
-    )`: a stopping time for a SFFM
-"""
-function NJumps( N::Int)
-    # Defines a simple stopping time, 1(n>N), where n is the number of jumps of φ.
-    # SFFM method
-    function NJumpsFun(
-        model::Model,
-        SFFM::NamedTuple{(:t, :φ, :X, :Y, :n)},
-        SFFM0::NamedTuple{(:t, :φ, :X, :Y, :n)},
-    )
-        Ind = n >= N
-        return (Ind = Ind, SFFM = SFFM)
-    end
-    return NJumpsFun
-end
-
-"""
-Constructs the `StoppingTime` which is the first exit of the process ``X(t)``
-from the interval ``[u,v]``.
-
-    FirstExitX( u::Real, v::Real)
-
-# Arguments
-- `u`: a lower boundary
-- `v`: an upper boundary
-
-# Output
-- `FirstExitXFun`: a function with two methods
-    - `FirstExitXFun(
-        model::Model,
-        SFM::NamedTuple{(:t, :φ, :X, :n)},
-        SFM0::NamedTuple{(:t, :φ, :X, :n)},
-    )`: a stopping time for a SFM.
-    - `FirstExitXFun(
-        model::Model,
-        SFFM::NamedTuple{(:t, :φ, :X, :Y, :n)},
-        SFFM0::NamedTuple{(:t, :φ, :X, :Y, :n)},
-    )`: a stopping time for a SFFM
-"""
-function FirstExitX( u::Real, v::Real)
-    # SFFM Method
-    function FirstExitXFun(
-        model::Model,
-        SFFM::NamedTuple{(:t, :φ, :X, :Y, :n)},
-        SFFM0::NamedTuple{(:t, :φ, :X, :Y, :n)},
-    )
-        Ind = ((X > v) || (X < u))
-        if Ind
-            if (X > v)
-                X = v
-            else
-                X = u
-            end
-            s = (X - SFFM0.X) / rates(model,SFFM0.φ) # can't exit with c = 0.
-            t = SFFM0.t + s
-            Y = UpdateYt(model, SFFM0, s)
-            SFFM = (t, SFFM0.φ, X, Y, SFFM0.n)
-        end
-        return (Ind = Ind, SFFM = SFFM)
-    end
-    return FirstExitXFun
-end
-
-"""
 Constructs the `StoppingTime` which is the first exit of the process ``Y(t)``
 from the interval ``[u,v]``. ASSUMES ``Y(t)`` is monotonic between jumps.
 
-    FirstExitY( u::Real, v::Real)
+    first_exit_y( u::Real, v::Real)
 
 # Arguments
 - `u`: a lower boundary
@@ -281,28 +251,35 @@ from the interval ``[u,v]``. ASSUMES ``Y(t)`` is monotonic between jumps.
         SFFM0::NamedTuple{(:t, :φ, :X, :Y, :n)},
     )`: a stopping time for a SFFM
 """
-function FirstExitY( u::Real, v::Real)
+function first_exit_y( u::Real, v::Real)
     # SFFM Method
-    function FirstExitYFun(
-        model::Model,
-        SFFM::NamedTuple{(:t, :φ, :X, :Y, :n)},
-        SFFM0::NamedTuple{(:t, :φ, :X, :Y, :n)},
+    function first_exit_yFun(
+        ffq::FluidFluidQueue,
+        SFM::NamedTuple{(:t, :φ, :X, :n)},
+        SFM0::NamedTuple{(:t, :φ, :X, :n)},
+        Y::Float64,
+        Y0::Float64,
     )
         Ind = ((Y < u) || (Y > v))
         if Ind
             idx = [Y < u; Y > v]
-            boundaryHit = [u;v][idx][1]
-            YFun(t) = UpdateYt(model, SFFM0, t) - boundaryHit
-            S = t - SFFM0.t
-            tstar = fzero(YFun, 0, S)
-            X = UpdateXt(model, SFFM0, tstar)
-            t = SFFM0.t + tstar
+            boundaryHit = only([u;v][idx])
+            cell_idx0 = initialise_cell_idx(ffq,SFM0)
+            SFM_path(t) = (t=SFM0.t+t,φ=SFM0.φ,X=DiscretisedFluidQueues.UpdateX(ffq.dq.model,SFM0,t),n=SFM0.n)
+            function YFun(t)
+                SFMt = SFM_path(t)
+                return UpdateYt(ffq, SFMt, SFM0, Y0, find_cell_idx(ffq,SFM0.φ,cell_idx0,SFMt.X), cell_idx0) - boundaryHit
+            end
+            S = SFM.t - SFM0.t
+            tstar = fzero(YFun, eps(), S)
+            X = DiscretisedFluidQueues.UpdateX(ffq.dq.model, SFM0, tstar)
+            t = SFM0.t + tstar
             Y = boundaryHit
-            SFFM = (t, SFFM0.φ, X, Y, SFFM0.n)
+            SFM = (t, SFM0.φ, X, SFM0.n)
         end
-        return (Ind = Ind, SFFM = SFFM)
+        return (Ind = Ind, SFM = SFM, Y=Y)
     end
-    return FirstExitYFun
+    return first_exit_yFun
 end
 
 

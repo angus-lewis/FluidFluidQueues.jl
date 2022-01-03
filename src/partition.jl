@@ -176,9 +176,8 @@ _sign_map_interior(ffq::FluidFluidQueue,k::Type{NotMinus}) = map(x->!(x<0.0),ffq
 _sign_map_interior(ffq::FluidFluidQueue,k::Type{NotZero}) = map(x->!(x==0.0),ffq.rates.interior)
 _sign_map_interior(ffq::FluidFluidQueue,k::Colon) = trues(size(ffq.rates.interior))
 
-_sign_map(ffq::FluidFluidQueue,k) = 
+_sign_map(ffq::FluidFluidQueue{T},k) where T<:DiscretisedFluidQueue = 
     [_sign_map_lwr_bndry(ffq,k) _sign_map_interior(ffq,k) _sign_map_upr_bndry(ffq,k)]
-
 
 Base.size(R::FluidFluidOperator{1}) = size(R.array)
 Base.getindex(R::FluidFluidOperator{1},i::AbstractVector) = R.array[i]
