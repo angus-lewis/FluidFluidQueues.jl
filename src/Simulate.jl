@@ -282,6 +282,21 @@ function first_exit_y( u::Real, v::Real)
     return first_exit_yFun
 end
 
+function n_jumps_y(N::Int)
+    # SFFM Method
+    function n_jumps_yFun(
+        ffq::FluidFluidQueue,
+        SFM::NamedTuple{(:t, :φ, :X, :n)},
+        SFM0::NamedTuple{(:t, :φ, :X, :n)},
+        Y::Float64,
+        Y0::Float64,
+    )
+        Ind = SFM.n>=N
+        return (Ind = Ind, SFM = SFM, Y=Y)
+    end
+    return n_jumps_yFun
+end
+
 
 """
 Finds zero of `f` using the bisection method on the interval `[a,b]` with

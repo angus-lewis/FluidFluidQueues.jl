@@ -3,7 +3,7 @@ using FluidFluidQueues
 ##
 # import Pkg
 # Pkg.activate(".")
-using DiscretisedFluidQueues, SparseArrays, LinearAlgebra
+using DiscretisedFluidQueues, SparseArrays, LinearAlgebra, StableRNGs
 
 # include("../src/operators.jl")
 # include("../src/partition.jl")
@@ -92,13 +92,31 @@ psi = build_psi(D)
 xi = build_xi(ffq_B,psi)
 marginal, point_mass, K = build_limit_dist_operators(ffq_B,D,R,psi,xi)
 
-# using Plots
-# plot(layout=(2,2))
-# for i in 1:n_phases(am)
-#      plot!(x->pdf(marginal)(x,i), nodes[1], nodes[end], subplot=i)
-# end
-# plot!()
+macro resetrng1()
+    return :(StableRNG(04012022))
+end
+macro resetrng2()
+    return :(StableRNG(204012022))
+end
+rng1 = @resetrng1()
+n_sim = 100
+XYvals = 6*rand(rng1,n_sim)
+phi0 = rand(rng1,1:4,n_sim)
+interior_rates = repeat(C,1,length(nodes)-1)
+ffq = augment_model(FluidFluidQueue(dq_notam,Rates(interior_rates,[0.0;0.0],[0.0;0.0])))
+ffq_notam = FluidFluidQueue(dq_notam,Rates(interior_rates,[0.0;0.0],[0.0;0.0]))
+rng2 = @resetrng2()
+SFM, YSims = simulate(ffq,FluidFluidQueues.n_jumps_y(10),
+    (φ=phi0, X=XYvals, Y=XYvals),
+    rng2,
+)
+rng2 = @resetrng2()
+SFM_notam, YSims_notam = simulate(ffq_notam,FluidFluidQueues.n_jumps_y(10),
+    (φ=max.(1,phi0.-1), X=XYvals, Y=XYvals), 
+    rng2,
+)
 
-
-# plot!(x->pdf(marginal)(x,1)+pdf(marginal)(x,2), nodes[1], nodes[end], subplot=4)
-# plot!()
+@test SFM.X ≈ YSims
+@test SFM_notam.X ≈ YSims_notam
+@test SFM_notam.t ≈ SFM.t
+@test SFM_notam.φ ≈ max.(1,SFM.φ.-1)
