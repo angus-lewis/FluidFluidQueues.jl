@@ -11,9 +11,9 @@ uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
 [[ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra", "SparseArrays"]
-git-tree-sha1 = "d711603452231bad418bd5e0c91f1abd650cba71"
+git-tree-sha1 = "926870acb6cbcf029396f2f2de030282b6bc1941"
 uuid = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-version = "1.11.3"
+version = "1.11.4"
 
 [[ChangesOfVariables]]
 deps = ["ChainRulesCore", "LinearAlgebra", "Test"]
@@ -49,7 +49,7 @@ uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 deps = ["FileIO", "JLD2", "Jacobi", "LinearAlgebra", "Random", "SparseArrays", "StableRNGs", "StaticArrays"]
 git-tree-sha1 = "71b40a6263cfb59ed25ebbefc9b11336a32086d5"
 repo-rev = "main"
-repo-url = "https://github.com/angus-lewis/DiscretisedFluidQueues.jl"
+repo-url = "../DiscretisedFluidQueues.jl"
 uuid = "8d825d2a-a153-45be-9001-3598b904770d"
 version = "0.3.0"
 
@@ -290,9 +290,9 @@ version = "1.0.0"
 
 [[StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
-git-tree-sha1 = "de9e88179b584ba9cf3cc5edbb7a41f26ce42cda"
+git-tree-sha1 = "88a559da57529581472320892576a486fa2377b9"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.3.0"
+version = "1.3.1"
 
 [[Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -312,9 +312,9 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[TimeZones]]
 deps = ["Dates", "Downloads", "InlineStrings", "LazyArtifacts", "Mocking", "Printf", "RecipesBase", "Serialization", "Unicode"]
-git-tree-sha1 = "ce5aab0b0146b81efefae52f13002e19c2af57ac"
+git-tree-sha1 = "0f1017f68dc25f1a0cb99f4988f78fe4f2e7955f"
 uuid = "f269a46b-ccf7-5d73-abea-4c690281aa53"
-version = "1.7.0"
+version = "1.7.1"
 
 [[TranscodingStreams]]
 deps = ["Random", "Test"]

@@ -115,7 +115,7 @@ function initialise_cell_idx(ffq,SFM0)
         else
             cell_idx0 = length(ffq.dq.mesh.nodes)
         end
-    elseif (cell_idx0==1)&&(rates(ffq.dq,SFM0.φ)<=0.0)&&(SFM0.X==0.0)
+    elseif (rates(ffq.dq,SFM0.φ)<=0.0)&&(SFM0.X==0.0)
         cell_idx0 = 0
     else 
         cell_idx0 -= 1
@@ -130,15 +130,15 @@ function find_cell_idx(ffq,φ0,cell_idx0,X)
     elseif X==ffq.dq.model.b
         cell_idx = length(ffq.dq.mesh.nodes)
     elseif (rates(ffq.dq,φ0)>0.0)
-        cell_idx = -1
+        cell_idx = NaN
         for n in max(1,cell_idx0):length(ffq.dq.mesh.nodes)
-            if ffq.dq.mesh.nodes[n]<X
-                cell_idx = n
+            if ffq.dq.mesh.nodes[n]>X
+                cell_idx = n-1
                 break
             end
         end
     elseif (rates(ffq.dq,φ0)<0.0)
-        cell_idx = -1
+        cell_idx = NaN
         for n in min(length(ffq.dq.mesh.nodes),cell_idx0):-1:1
             if ffq.dq.mesh.nodes[n]<X
                 cell_idx = n
@@ -174,13 +174,14 @@ function UpdateYt(
     Y0::Float64,
     cell_idx::Int, cell_idx0::Int,
 )
-    # given the last position of a SFM, SFM0, a time step of size s, find the
-    # position of Y at time t
+    # given the position of a SFM, SFM0 at time t, a time step of size s, find the
+    # position of Y at time t+s
     speedX = rates(ffq.dq,SFM0.φ)
     if (speedX==0.0)||((speedX<=0.0)&&(SFM0.X==0.0))||((speedX>=0.0)&&(SFM0.X==ffq.dq.model.b))
+        # determine if X is at a boundary
         Y = Y0 + (SFM.t-SFM0.t) * getrates(ffq,SFM0.φ,cell_idx0)
     else
-        # determine if X has hit a boundary 
+        # determine if X has hit a boundary (did not start at the same boundary)
         if (SFM.X==0.0)||(SFM.X==ffq.dq.model.b) 
             if speedX>0.0 # must be upper boundary in this case
                 cells_traversed_fully = cell_idx0+1:cell_idx-1
@@ -192,12 +193,12 @@ function UpdateYt(
                 Y = Y0 + dot(getrates(ffq,SFM0.φ,cell_idx0:cell_idx-1),time_spent_in_cells_traversed)
             elseif speedX<0.0 # must be lower boundary in this case
                 cells_traversed_fully = cell_idx+1:cell_idx0-1
-                time_spent_in_cells_traversed = [
+                time_spent_in_cells_traversed = -[
                     #(ffq.dq.mesh.nodes[cell_idx+1]-SFM.X)./speedX; # time since last change of cell
                     [Δ(ffq.dq.mesh,k) for k in cells_traversed_fully]./speedX;
                     (SFM0.X-ffq.dq.mesh.nodes[cell_idx0])./speedX; # time to leave first cell
                 ]
-                Y = Y0 - dot(getrates(ffq,SFM0.φ,cell_idx+1:cell_idx0),time_spent_in_cells_traversed)
+                Y = Y0 + dot(getrates(ffq,SFM0.φ,cell_idx+1:cell_idx0),time_spent_in_cells_traversed)
             end
         else
             if speedX>0.0
@@ -215,16 +216,16 @@ function UpdateYt(
                 end
             elseif speedX<0.0
                 if cell_idx0==cell_idx
-                    time_spent_in_cells_traversed = (SFM0.X-SFM.X)./speedX
-                    Y = Y0 - dot(getrates(ffq,SFM0.φ,cell_idx0),time_spent_in_cells_traversed)
+                    time_spent_in_cells_traversed = -(SFM0.X-SFM.X)./speedX
+                    Y = Y0 + dot(getrates(ffq,SFM0.φ,cell_idx0),time_spent_in_cells_traversed)
                 else
                     cells_traversed_fully = cell_idx+1:cell_idx0-1
-                    time_spent_in_cells_traversed = [
+                    time_spent_in_cells_traversed = -[
                         (ffq.dq.mesh.nodes[cell_idx+1]-SFM.X)./speedX; # time since last change of cell
                         [Δ(ffq.dq.mesh,k) for k in cells_traversed_fully]./speedX;
                         (SFM0.X-ffq.dq.mesh.nodes[cell_idx0])./speedX; # time to leave first cell
                     ]
-                    Y = Y0 - dot(getrates(ffq,SFM0.φ,cell_idx:cell_idx0),time_spent_in_cells_traversed)
+                    Y = Y0 + dot(getrates(ffq,SFM0.φ,cell_idx:cell_idx0),time_spent_in_cells_traversed)
                 end
             end
         end
@@ -268,10 +269,11 @@ function first_exit_y( u::Real, v::Real)
             SFM_path(t) = (t=SFM0.t+t,φ=SFM0.φ,X=DiscretisedFluidQueues.UpdateX(ffq.dq.model,SFM0,t),n=SFM0.n)
             function YFun(t)
                 SFMt = SFM_path(t)
-                return UpdateYt(ffq, SFMt, SFM0, Y0, find_cell_idx(ffq,SFM0.φ,cell_idx0,SFMt.X), cell_idx0) - boundaryHit
+                cell_idx = find_cell_idx(ffq,SFM0.φ,cell_idx0,SFMt.X)
+                return UpdateYt(ffq, SFMt, SFM0, Y0, cell_idx, cell_idx0) - boundaryHit
             end
             S = SFM.t - SFM0.t
-            tstar = fzero(YFun, eps(), S)
+            tstar = fzero(YFun, 1e-32, S)
             X = DiscretisedFluidQueues.UpdateX(ffq.dq.model, SFM0, tstar)
             t = SFM0.t + tstar
             Y = boundaryHit
@@ -307,23 +309,31 @@ error `err`.
 """
 function fzero( f::Function, a::Real, b::Real; err::Float64 = 1e-6)
     # finds zeros of f using the bisection method
-    c = a + (b - a) / 2
+    c = a + (b - a) / 2.0
     while a < c < b
         fc = f(c)
-        if abs(fc) < err
+        if (abs(fc) < err)&&((b-a)<err)
             break
         end
         p = f(a) * fc 
-        if p < 0
+        if p < 0.0
             a, b = a, c
-        elseif p > 0
+        elseif p > 0.0
             a, b = c, b
-        elseif fc == 0
+        elseif fc == 0.0
             break
         else 
             a = a+sqrt(eps())
         end
-        c = a + (b - a) / 2
+        c = a + (b - a) / 2.0
     end
     return c
+end
+
+function brute_force_zero(f::Function, a::Real, b::Real; err::Float64 = 1e-6)
+    x = range(a,b;step=err)
+    fx = abs.(f.(x))
+    val, ind = findmin(fx)
+    (val>err)&&(@warn "no values with |f(x)| sufficiently small, returning the closest: |f(x)| = f("*string(x[ind])*") = "*string(fx[ind]))
+    return x[ind]
 end

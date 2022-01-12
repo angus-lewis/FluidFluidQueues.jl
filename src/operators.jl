@@ -61,10 +61,12 @@ function build_psi(
     OldPsi = Psi
     flag = 1
     for n = 1:MaxIters
-        ## line below goes with algorithm 4, is quadratically convergent
+        ## line below goes with algorithm 4, is quadratically convergen
         Psi = sylvester(Matrix(A), Matrix(B), Matrix(C))
         ## line below goes with algorithm 1
         # Psi = mysyl(RA,QA,RB,QB,C)
+        @show maximum(abs.(OldPsi - Psi))
+        @show n
         if maximum(abs.(OldPsi - Psi)) < err
             flag = 0
             exitflag = string(
@@ -79,13 +81,13 @@ function build_psi(
             exitflag = string("Produced NaNs at iteration ", n)
             break
         end
-        OldPsi = Psi
+        OldPsi = copy(Psi)
         ## Algorithm 4 of Bean, O'Reilly, Taylor, 2008, 
         ## Algorithms for the Laplace–Stieltjes Transforms of First Return Times for Stochastic Fluid Flows, 
         ## Methodol Comput Appl Probab (2008) 10:381–408, DOI 10.1007/s11009-008-9077-3
-        A = D[Plus,Plus] + Psi * D[Minus,Plus]
-        B = D[Minus,Minus] + D[Minus,Plus] * Psi
-        C = D[Plus,Minus] - Psi * D[Minus,Plus] * Psi
+        A .= D[Plus,Plus] + Psi * D[Minus,Plus]
+        B .= D[Minus,Minus] + D[Minus,Plus] * Psi
+        C .= D[Plus,Minus] - Psi * D[Minus,Plus] * Psi
         ## Algorithm 1 of the above citation
         # A, B dont change, need only comput schur decomp once 
         # C = D["+-"] + Psi * D["-+"] * Psi
@@ -100,6 +102,10 @@ function build_psi(
     end
     v && println("UPDATE: Iterations for Ψ exited with flag: ", exitflag)
     return Psi
+end
+
+function build_psi(ffq::FluidFluidQueue, s::Union{Real,Complex}; kwargs...)
+    return build_psi(InOutGenerator(ffq,s; kwargs...))
 end
 
 function build_xi(B::FluidFluidGenerator,Ψ::Array{Float64,2})
