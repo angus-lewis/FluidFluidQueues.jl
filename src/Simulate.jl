@@ -139,7 +139,7 @@ function find_cell_idx(ffq,φ0,cell_idx0,X)
         end
     elseif (rates(ffq.dq,φ0)<0.0)
         cell_idx = NaN
-        for n in min(length(ffq.dq.mesh.nodes),cell_idx0):-1:1
+        for n in min(length(ffq.dq.mesh.nodes)-1,cell_idx0):-1:1
             if ffq.dq.mesh.nodes[n]<X
                 cell_idx = n
                 break
@@ -273,10 +273,10 @@ function first_exit_y( u::Real, v::Real)
                 return UpdateYt(ffq, SFMt, SFM0, Y0, cell_idx, cell_idx0) - boundaryHit
             end
             S = SFM.t - SFM0.t
-            tstar = fzero(YFun, 1e-32, S)
+            tstar = fzero(YFun, 1e-64, S)
             X = DiscretisedFluidQueues.UpdateX(ffq.dq.model, SFM0, tstar)
             t = SFM0.t + tstar
-            Y = boundaryHit
+            Y = YFun(tstar)+boundaryHit
             SFM = (t, SFM0.φ, X, SFM0.n)
         end
         return (Ind = Ind, SFM = SFM, Y=Y)
@@ -297,6 +297,28 @@ function n_jumps_y(N::Int)
         return (Ind = Ind, SFM = SFM, Y=Y)
     end
     return n_jumps_yFun
+end
+
+function fixed_time_y(T::Real)
+    # SFFM Method
+    function fixed_time_yFun(
+        ffq::FluidFluidQueue,
+        SFM::NamedTuple{(:t, :φ, :X, :n)},
+        SFM0::NamedTuple{(:t, :φ, :X, :n)},
+        Y::Float64,
+        Y0::Float64,
+    )
+        Ind = SFM.t>=T
+        if Ind 
+            S = T-SFM0.t
+            X = DiscretisedFluidQueues.UpdateX(ffq.dq.model,SFM0,S)
+            cell_idx = find_cell_idx(ffq,SFM0.φ,cell_idx0,X) # find the cell in which X resides
+            SFM = (t=T, φ=SFM0.φ, X=X, n=SFM0.n)
+            Y = UpdateYt(ffq, SFM, SFM0, Y0, cell_idx, cell_idx0)
+        end 
+        return (Ind = Ind, SFM = SFM, Y=Y)
+    end
+    return fixed_time_yFun
 end
 
 

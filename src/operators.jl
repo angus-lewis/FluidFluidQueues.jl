@@ -46,7 +46,7 @@ end
 function build_psi(
     D::InOutGenerator; 
     MaxIters::Int = 1000, 
-    err::Float64 = 1e-8,
+    err::Float64 = 1e-9,
     v::Bool = false,
 )
 
@@ -61,7 +61,7 @@ function build_psi(
     OldPsi = Psi
     flag = 1
     for n = 1:MaxIters
-        ## line below goes with algorithm 4, is quadratically convergen
+        ## line below goes with algorithm 4, is quadratically convergent
         Psi = sylvester(Matrix(A), Matrix(B), Matrix(C))
         ## line below goes with algorithm 1
         # Psi = mysyl(RA,QA,RB,QB,C)
