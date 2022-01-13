@@ -1,6 +1,5 @@
 [deps]
 DiscretisedFluidQueues = "8d825d2a-a153-45be-9001-3598b904770d"
-FluidFluidQueues = "d6d9befd-9522-4a5a-b455-5c4e55a38956"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StableRNGs = "860ef19b-820b-49d6-a774-d7a799459cd3"

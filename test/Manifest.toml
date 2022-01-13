@@ -78,12 +78,6 @@ git-tree-sha1 = "67551df041955cc6ee2ed098718c8fcd7fc7aebe"
 uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 version = "1.12.0"
 
-[[FluidFluidQueues]]
-deps = ["DiscretisedFluidQueues", "LinearAlgebra", "Random", "SparseArrays"]
-path = ".."
-uuid = "d6d9befd-9522-4a5a-b455-5c4e55a38956"
-version = "0.1.0"
-
 [[InlineStrings]]
 deps = ["Parsers"]
 git-tree-sha1 = "8d70835a3759cdd75881426fced1508bb7b7e1b6"
