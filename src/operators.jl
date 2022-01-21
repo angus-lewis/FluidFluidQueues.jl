@@ -53,21 +53,21 @@ function build_psi(
     exitflag = ""
 
     Psi = zeros(Float64, size(D[Plus,Minus]))
-    A = D[Plus,Plus]
-    B = D[Minus,Minus]
-    C = D[Plus,Minus]
+    A = Matrix(D[Plus,Plus])
+    B = Matrix(D[Minus,Minus])
+    C = Matrix(D[Plus,Minus])
     # RA, QA = LinearAlgebra.schur(Matrix(A)) # uncomment for algorithm 1
     # RB, QB = LinearAlgebra.schur(Matrix(B)) # uncomment for algorithm 1
     OldPsi = Psi
     flag = 1
     for n = 1:MaxIters
         ## line below goes with algorithm 4, is quadratically convergent
-        Psi = sylvester(Matrix(A), Matrix(B), Matrix(C))
+       @time Psi = sylvester(A, B, C)
         ## line below goes with algorithm 1
         # Psi = mysyl(RA,QA,RB,QB,C)
         @show maximum(abs.(OldPsi - Psi))
         @show n
-        if maximum(abs.(OldPsi - Psi)) < err
+        @time if maximum(abs.(OldPsi - Psi)) < err
             flag = 0
             exitflag = string(
                 "Reached err tolerance in ",
@@ -81,13 +81,15 @@ function build_psi(
             exitflag = string("Produced NaNs at iteration ", n)
             break
         end
-        OldPsi = copy(Psi)
+        @time OldPsi = copy(Psi)
         ## Algorithm 4 of Bean, O'Reilly, Taylor, 2008, 
         ## Algorithms for the Laplace–Stieltjes Transforms of First Return Times for Stochastic Fluid Flows, 
         ## Methodol Comput Appl Probab (2008) 10:381–408, DOI 10.1007/s11009-008-9077-3
-        A .= D[Plus,Plus] + Psi * D[Minus,Plus]
-        B .= D[Minus,Minus] + D[Minus,Plus] * Psi
-        C .= D[Plus,Minus] - Psi * D[Minus,Plus] * Psi
+        @time A = Psi * D[Minus,Plus]
+        @time C = D[Plus,Minus] - A * Psi
+        @time A += D[Plus,Plus] 
+        @time B = D[Minus,Minus] + D[Minus,Plus] * Psi
+        
         ## Algorithm 1 of the above citation
         # A, B dont change, need only comput schur decomp once 
         # C = D["+-"] + Psi * D["-+"] * Psi
