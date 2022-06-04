@@ -37,11 +37,11 @@ uuid = "ade2ca70-3891-5945-98fb-dc099432e06a"
 
 [[DiscretisedFluidQueues]]
 deps = ["FileIO", "JLD2", "Jacobi", "LinearAlgebra", "Random", "SparseArrays", "StableRNGs", "StaticArrays"]
-git-tree-sha1 = "73015d5f188896bd101e467b88d9d7a18cd1a3a7"
+git-tree-sha1 = "09cfb2ac41565a46ee1e8ecfd3f394babe56cb0d"
 repo-rev = "main"
 repo-url = "https://github.com/angus-lewis/DiscretisedFluidQueues.jl"
 uuid = "8d825d2a-a153-45be-9001-3598b904770d"
-version = "0.1.0"
+version = "1.0.0"
 
 [[DocStringExtensions]]
 deps = ["LibGit2"]
