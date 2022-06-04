@@ -8,7 +8,7 @@ using SparseArrays
 include("queue.jl")
 include("operators.jl")
 include("partition.jl")
-include("simulate.jl")
+include("Simulate.jl")
 
 export Rates, FluidFluidQueue
 export augment_model
